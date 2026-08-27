@@ -309,6 +309,11 @@
     [523, 659, 784, 1047].forEach((frequency, index) => tone(frequency, .42, .06, 'triangle', index * .12));
   }
 
+  function missSound() {
+    tone(220, .18, .035, 'triangle');
+    tone(165, .24, .035, 'triangle', .13);
+  }
+
   async function spin() {
     const people = activeParticipants();
     if (state.spinning) return;
@@ -317,7 +322,8 @@
       return;
     }
     state.spinning = true;
-    state.winner = securePick(people);
+    const outcome = SlotEngine.createOutcome(people, secureIndex);
+    state.winner = outcome.winner;
     els.spinButton.disabled = true;
     els.status.textContent = 'УДАЧА УЖЕ РЕШИЛА…';
     els.winnerPanel.classList.remove('open');
@@ -325,12 +331,21 @@
     navigator.vibrate?.([35, 45, 35]);
 
     await Promise.all([
-      animateReel(0, people, state.winner, 2700),
-      animateReel(1, people, state.winner, 3250),
-      animateReel(2, people, state.winner, 3800)
+      animateReel(0, people, outcome.reels[0], 2700),
+      animateReel(1, people, outcome.reels[1], 3250),
+      animateReel(2, people, outcome.reels[2], 3800)
     ]);
 
     state.spinning = false;
+    if (outcome.kind !== 'jackpot') {
+      els.status.textContent = outcome.kind === 'near'
+        ? 'ПОЧТИ! ЕЩЁ ОДНА ПОПЫТКА'
+        : 'МИМО — КРУТИМ ЕЩЁ!';
+      els.spinButton.disabled = false;
+      missSound();
+      navigator.vibrate?.(55);
+      return;
+    }
     els.status.textContent = `ДЖЕКПОТ — ${state.winner.name.toUpperCase()}!`;
     winSound();
     navigator.vibrate?.([80, 60, 120, 60, 180]);
