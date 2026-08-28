@@ -260,12 +260,14 @@
     return symbol;
   }
 
-  function setReel(strip, people, finalPerson = null, symbolCount = 1) {
+  function setReel(strip, people, finalPerson = null, symbolCount = 1, teasePerson = null) {
     const windowElement = strip.parentElement;
     const height = windowElement.clientHeight || 220;
     strip.replaceChildren();
     for (let i = 0; i < symbolCount; i += 1) {
-      const person = (finalPerson && i === symbolCount - 1) ? finalPerson : securePick(people);
+      let person = securePick(people);
+      if (teasePerson && i === symbolCount - 2) person = teasePerson;
+      if (finalPerson && i === symbolCount - 1) person = finalPerson;
       strip.append(makeSymbol(person, height));
     }
     strip.style.transform = 'translateY(0)';
@@ -278,26 +280,58 @@
     [0, 1, 2].forEach(index => setReel($(`#reel${index}`), people, null, 1));
   }
 
-  function animateReel(index, people, winner, duration) {
+  function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  function moveReel(strip, distance, duration, easing) {
     return new Promise(resolve => {
-      const strip = $(`#reel${index}`);
-      const windowElement = strip.parentElement;
-      const symbols = 20 + index * 4;
-      const { height } = setReel(strip, people, winner, symbols);
-      windowElement.classList.add('spinning');
-      strip.style.transition = 'none';
-      strip.style.transform = 'translateY(0)';
-      void strip.offsetHeight;
-      strip.style.transition = `transform ${duration}ms cubic-bezier(.12,.62,.12,1)`;
-      strip.style.transform = `translateY(-${(symbols - 1) * height}px)`;
-      const finish = () => {
-        windowElement.classList.remove('spinning');
+      let settled = false;
+      const finish = event => {
+        if (settled || (event && event.propertyName !== 'transform')) return;
+        settled = true;
         strip.removeEventListener('transitionend', finish);
+        clearTimeout(fallback);
         resolve();
       };
-      strip.addEventListener('transitionend', finish, { once: true });
-      setTimeout(finish, duration + 150);
+      strip.addEventListener('transitionend', finish);
+      strip.style.transition = `transform ${duration}ms ${easing}`;
+      strip.style.transform = `translateY(-${distance}px)`;
+      const fallback = setTimeout(finish, duration + 150);
     });
+  }
+
+  async function animateReel(index, people, winner, duration, presentation) {
+    const strip = $(`#reel${index}`);
+    const windowElement = strip.parentElement;
+    const symbols = 20 + index * 4;
+    const isFalseStop = index === presentation.falseStopReel;
+    const teasePool = people.filter(person => person.id !== winner.id);
+    const teasePerson = isFalseStop ? securePick(teasePool) : null;
+    const { height } = setReel(strip, people, winner, symbols, teasePerson);
+    windowElement.classList.add('spinning');
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateY(0)';
+    void strip.offsetHeight;
+
+    if (!isFalseStop) {
+      await moveReel(strip, (symbols - 1) * height, duration, 'cubic-bezier(.12,.62,.12,1)');
+      windowElement.classList.remove('spinning');
+      mechanicalClack();
+      return;
+    }
+
+    const approachMs = duration - presentation.pauseMs - presentation.nudgeMs;
+    await moveReel(strip, (symbols - 2) * height, approachMs, 'cubic-bezier(.12,.62,.12,1)');
+    windowElement.classList.remove('spinning');
+    windowElement.classList.add('false-stop');
+    mechanicalClack(0.8);
+    navigator.vibrate?.(35);
+    await wait(presentation.pauseMs);
+    windowElement.classList.remove('false-stop');
+    windowElement.classList.add('nudge');
+    await moveReel(strip, (symbols - 1) * height, presentation.nudgeMs, 'cubic-bezier(.18,.72,.22,1.14)');
+    windowElement.classList.remove('nudge');
+    mechanicalClack(1.2);
+    navigator.vibrate?.([25, 30, 55]);
   }
 
   let audioContext = null;
@@ -321,10 +355,46 @@
     oscillator.start(start); oscillator.stop(start + duration);
   }
 
+  function noiseBurst(duration = 0.06, volume = 0.045) {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const length = Math.ceil(ctx.sampleRate * duration);
+    const random = new Uint32Array(length);
+    crypto.getRandomValues(random);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) {
+      data[i] = ((random[i] / 0xffffffff) * 2 - 1) * (1 - i / length);
+    }
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    source.buffer = buffer;
+    filter.type = 'bandpass';
+    filter.frequency.value = 1050;
+    filter.Q.value = 0.7;
+    gain.gain.value = volume;
+    source.connect(filter).connect(gain).connect(ctx.destination);
+    source.start();
+  }
+
+  function mechanicalClack(weight = 1) {
+    noiseBurst(0.065, 0.055 * weight);
+    tone(92, 0.1, 0.045 * weight, 'square');
+    tone(54, 0.13, 0.03 * weight, 'triangle', 0.025);
+  }
+
   function spinSound() {
     tone(72, REEL_DURATIONS[2] / 1000 + .1, 0.025, 'sawtooth');
     for (let i = 0; i < 42; i += 1) tone(240 + (i % 3) * 25, 0.035, 0.018, 'square', i * .125);
-    REEL_DURATIONS.forEach(duration => tone(125, .13, .06, 'square', duration / 1000 - .05));
+  }
+
+  function anticipationSound(outcome) {
+    if (outcome.reels[0].id !== outcome.reels[1].id) return;
+    const start = REEL_DURATIONS[1] / 1000 + 0.08;
+    for (let i = 0; i < 8; i += 1) {
+      tone(330 + i * 48, 0.09, 0.025 + i * 0.003, 'triangle', start + i * 0.15);
+    }
   }
 
   function winSound() {
@@ -350,6 +420,7 @@
       secureIndex,
       state.spinHistory.spinsSinceJackpot
     );
+    const presentation = SlotEngine.createPresentation(secureIndex);
     state.spinHistory.spinsSinceJackpot = outcome.nextSpinsSinceJackpot;
     state.winner = outcome.winner;
     saveState();
@@ -357,10 +428,11 @@
     els.status.textContent = 'УДАЧА УЖЕ РЕШИЛА…';
     els.winnerPanel.classList.remove('open');
     spinSound();
+    anticipationSound(outcome);
     navigator.vibrate?.([35, 45, 35]);
 
     await Promise.all(REEL_DURATIONS.map((duration, index) =>
-      animateReel(index, people, outcome.reels[index], duration)
+      animateReel(index, people, outcome.reels[index], duration, presentation)
     ));
 
     state.spinning = false;
