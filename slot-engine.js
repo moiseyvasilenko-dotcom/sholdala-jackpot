@@ -79,18 +79,9 @@
     };
   }
 
-  function createPresentation(randomIndex) {
-    if (typeof randomIndex !== 'function') throw new Error('randomIndex is required');
-    const hasFalseStop = randomIndex(100) < 40;
-    return hasFalseStop
-      ? { falseStopReel: 2, pauseMs: 240, nudgeMs: 360 }
-      : { falseStopReel: -1, pauseMs: 0, nudgeMs: 0 };
-  }
-
   return {
     createOutcome,
     createManagedOutcome,
-    createPresentation,
     JACKPOT_LIMIT,
     NEAR_LIMIT,
     ROLL_SIZE

@@ -16,13 +16,9 @@ test('the three reels stop with clearly increasing dramatic gaps', () => {
   assert.match(app, /REEL_DURATIONS\.map\(\(duration, index\) =>/);
 });
 
-test('the final reel supports a visual and audible false stop without changing the outcome', () => {
+test('reels stop smoothly without a false landing or nudge', () => {
   const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8');
-  assert.match(app, /SlotEngine\.createPresentation\(secureIndex\)/);
-  assert.match(app, /teasePerson/);
-  assert.match(app, /false-stop/);
-  assert.match(app, /mechanicalClack/);
-  assert.match(app, /anticipationSound/);
-  assert.match(css, /\.reel-window\.false-stop/);
+  assert.doesNotMatch(app, /createPresentation|teasePerson|false-stop|nudge/);
+  assert.doesNotMatch(css, /\.reel-window\.false-stop|false-stop-flash/);
 });

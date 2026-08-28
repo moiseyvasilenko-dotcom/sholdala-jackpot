@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const {
   createOutcome,
   createManagedOutcome,
-  createPresentation,
   JACKPOT_LIMIT,
   NEAR_LIMIT,
   ROLL_SIZE
@@ -106,20 +105,6 @@ test('managed mode guarantees a jackpot on the tenth spin', () => {
   assert.equal(outcome.nextSpinsSinceJackpot, 0);
 });
 
-test('presentation occasionally adds a false stop only to the final reel', () => {
-  assert.deepEqual(createPresentation(sequence(0)), {
-    falseStopReel: 2,
-    pauseMs: 240,
-    nudgeMs: 360
-  });
-  assert.deepEqual(createPresentation(sequence(39)), {
-    falseStopReel: 2,
-    pauseMs: 240,
-    nudgeMs: 360
-  });
-  assert.deepEqual(createPresentation(sequence(40)), {
-    falseStopReel: -1,
-    pauseMs: 0,
-    nudgeMs: 0
-  });
+test('the engine does not expose a false-stop presentation policy', () => {
+  assert.equal(require('../slot-engine.js').createPresentation, undefined);
 });
