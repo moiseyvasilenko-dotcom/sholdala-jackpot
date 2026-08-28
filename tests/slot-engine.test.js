@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createOutcome } = require('../slot-engine.js');
+const {
+  createOutcome,
+  JACKPOT_LIMIT,
+  NEAR_LIMIT,
+  ROLL_SIZE
+} = require('../slot-engine.js');
 
 const people = [
   { id: 'a', name: 'А' },
@@ -18,21 +23,21 @@ function sequence(...values) {
   };
 }
 
-test('roll 0..2999 produces a jackpot with one uniformly selected winner', () => {
-  const outcome = createOutcome(people, sequence(2999, 1));
+test('roll 0..1499 produces a jackpot with one uniformly selected winner', () => {
+  const outcome = createOutcome(people, sequence(1499, 1));
   assert.equal(outcome.kind, 'jackpot');
   assert.equal(outcome.winner, people[1]);
   assert.deepEqual(outcome.reels, [people[1], people[1], people[1]]);
 });
 
-test('roll 3000..7499 produces an explicit near miss with a random odd reel', () => {
-  const outcome = createOutcome(people, sequence(3000, 0, 0, 2));
+test('roll 1500..6499 produces an explicit near miss with a random odd reel', () => {
+  const outcome = createOutcome(people, sequence(1500, 0, 0, 2));
   assert.equal(outcome.kind, 'near');
   assert.equal(outcome.winner, null);
   assert.deepEqual(outcome.reels, [people[0], people[0], people[1]]);
 });
 
-test('roll 7500..9999 produces a non-jackpot random combination', () => {
+test('roll 6500..9999 produces a non-jackpot random combination', () => {
   const outcome = createOutcome(people, sequence(9999, 0, 1, 2));
   assert.equal(outcome.kind, 'mixed');
   assert.equal(outcome.winner, null);
@@ -40,11 +45,31 @@ test('roll 7500..9999 produces a non-jackpot random combination', () => {
 });
 
 test('mixed outcome replaces the final reel when three random picks match', () => {
-  const outcome = createOutcome(people, sequence(7500, 0, 0, 0, 0));
+  const outcome = createOutcome(people, sequence(6500, 0, 0, 0, 0));
   assert.equal(outcome.kind, 'mixed');
   assert.deepEqual(outcome.reels, [people[0], people[0], people[1]]);
 });
 
 test('requires at least two eligible participants', () => {
   assert.throws(() => createOutcome([people[0]], sequence(0)), /at least two/i);
+});
+
+test('the complete 10,000-roll probability space is exactly 15% jackpot, 50% near and 35% mixed', () => {
+  const counts = { jackpot: 0, near: 0, mixed: 0 };
+
+  for (let roll = 0; roll < ROLL_SIZE; roll += 1) {
+    let firstDraw = true;
+    const outcome = createOutcome(people, maximum => {
+      if (firstDraw) {
+        firstDraw = false;
+        return roll;
+      }
+      return 0 % maximum;
+    });
+    counts[outcome.kind] += 1;
+  }
+
+  assert.equal(JACKPOT_LIMIT, 1500);
+  assert.equal(NEAR_LIMIT, 6500);
+  assert.deepEqual(counts, { jackpot: 1500, near: 5000, mixed: 3500 });
 });

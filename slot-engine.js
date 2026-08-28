@@ -5,8 +5,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, () => {
   'use strict';
 
-  const JACKPOT_LIMIT = 3000;
-  const NEAR_LIMIT = 7500;
+  const JACKPOT_LIMIT = 1500;
+  const NEAR_LIMIT = 6500;
   const ROLL_SIZE = 10000;
 
   function createOutcome(people, randomIndex) {
