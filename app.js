@@ -2,6 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'sholdala-jackpot-state-v1';
+  const REEL_DURATIONS = Object.freeze([2700, 4000, 5400]);
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
 
@@ -321,9 +322,9 @@
   }
 
   function spinSound() {
-    tone(72, 3.9, 0.025, 'sawtooth');
-    for (let i = 0; i < 28; i += 1) tone(240 + (i % 3) * 25, 0.035, 0.018, 'square', i * .105);
-    [2.65, 3.2, 3.75].forEach(delay => tone(125, .13, .06, 'square', delay));
+    tone(72, REEL_DURATIONS[2] / 1000 + .1, 0.025, 'sawtooth');
+    for (let i = 0; i < 42; i += 1) tone(240 + (i % 3) * 25, 0.035, 0.018, 'square', i * .125);
+    REEL_DURATIONS.forEach(duration => tone(125, .13, .06, 'square', duration / 1000 - .05));
   }
 
   function winSound() {
@@ -358,11 +359,9 @@
     spinSound();
     navigator.vibrate?.([35, 45, 35]);
 
-    await Promise.all([
-      animateReel(0, people, outcome.reels[0], 2700),
-      animateReel(1, people, outcome.reels[1], 3250),
-      animateReel(2, people, outcome.reels[2], 3800)
-    ]);
+    await Promise.all(REEL_DURATIONS.map((duration, index) =>
+      animateReel(index, people, outcome.reels[index], duration)
+    ));
 
     state.spinning = false;
     if (outcome.kind !== 'jackpot') {
