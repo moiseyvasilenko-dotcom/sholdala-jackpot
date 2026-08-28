@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   createOutcome,
+  createManagedOutcome,
   JACKPOT_LIMIT,
   NEAR_LIMIT,
   ROLL_SIZE
@@ -72,4 +73,34 @@ test('the complete 10,000-roll probability space is exactly 15% jackpot, 50% nea
   assert.equal(JACKPOT_LIMIT, 1500);
   assert.equal(NEAR_LIMIT, 6500);
   assert.deepEqual(counts, { jackpot: 1500, near: 5000, mixed: 3500 });
+});
+
+test('managed mode protects the first two spins after a jackpot', () => {
+  const first = createManagedOutcome(people, sequence(0, 0, 0, 0), 0);
+  const second = createManagedOutcome(people, sequence(0, 0, 0, 0), first.nextSpinsSinceJackpot);
+
+  assert.equal(first.kind, 'near');
+  assert.equal(first.spinNumber, 1);
+  assert.equal(first.nextSpinsSinceJackpot, 1);
+  assert.equal(second.kind, 'near');
+  assert.equal(second.spinNumber, 2);
+  assert.equal(second.nextSpinsSinceJackpot, 2);
+});
+
+test('managed mode allows a random jackpot from the third spin', () => {
+  const outcome = createManagedOutcome(people, sequence(0, 1), 2);
+
+  assert.equal(outcome.kind, 'jackpot');
+  assert.equal(outcome.winner, people[1]);
+  assert.equal(outcome.spinNumber, 3);
+  assert.equal(outcome.nextSpinsSinceJackpot, 0);
+});
+
+test('managed mode guarantees a jackpot on the tenth spin', () => {
+  const outcome = createManagedOutcome(people, sequence(2), 9);
+
+  assert.equal(outcome.kind, 'jackpot');
+  assert.equal(outcome.winner, people[2]);
+  assert.equal(outcome.spinNumber, 10);
+  assert.equal(outcome.nextSpinsSinceJackpot, 0);
 });

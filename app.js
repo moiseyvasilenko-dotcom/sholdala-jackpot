@@ -9,6 +9,7 @@
     participants: [],
     task: 'Мыть посуду',
     sound: true,
+    spinHistory: { signature: '', spinsSinceJackpot: 0 },
     spinning: false,
     winner: null
   };
@@ -30,6 +31,12 @@
       if (saved?.participants) state.participants = saved.participants;
       if (saved?.task) state.task = saved.task;
       if (typeof saved?.sound === 'boolean') state.sound = saved.sound;
+      if (saved?.spinHistory && typeof saved.spinHistory.signature === 'string') {
+        state.spinHistory.signature = saved.spinHistory.signature;
+        state.spinHistory.spinsSinceJackpot = Number.isInteger(saved.spinHistory.spinsSinceJackpot)
+          ? Math.max(0, Math.min(saved.spinHistory.spinsSinceJackpot, 9))
+          : 0;
+      }
     } catch (_) { /* start clean if storage is unavailable */ }
   }
 
@@ -38,7 +45,8 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         participants: state.participants,
         task: state.task,
-        sound: state.sound
+        sound: state.sound,
+        spinHistory: state.spinHistory
       }));
     } catch (_) {
       showToast('На устройстве закончилось место для фотографий');
@@ -51,6 +59,18 @@
 
   function activeParticipants(includeExcluded = false) {
     return state.participants.filter(person => person.active && (includeExcluded || !person.excluded));
+  }
+
+  function gameSignature() {
+    const ids = activeParticipants(true).map(person => person.id).sort();
+    return JSON.stringify([ids, state.task.trim()]);
+  }
+
+  function prepareSpinHistory() {
+    const signature = gameSignature();
+    if (state.spinHistory.signature !== signature) {
+      state.spinHistory = { signature, spinsSinceJackpot: 0 };
+    }
   }
 
   function pluralPeople(number) {
@@ -195,6 +215,7 @@
   function showGame() {
     if (activeParticipants(true).length < 2) return;
     state.participants.forEach(person => { if (person.active) person.excluded = false; });
+    prepareSpinHistory();
     saveState();
     els.setupView.hidden = true;
     els.gameView.hidden = false;
@@ -322,8 +343,15 @@
       return;
     }
     state.spinning = true;
-    const outcome = SlotEngine.createOutcome(people, secureIndex);
+    prepareSpinHistory();
+    const outcome = SlotEngine.createManagedOutcome(
+      people,
+      secureIndex,
+      state.spinHistory.spinsSinceJackpot
+    );
+    state.spinHistory.spinsSinceJackpot = outcome.nextSpinsSinceJackpot;
     state.winner = outcome.winner;
+    saveState();
     els.spinButton.disabled = true;
     els.status.textContent = 'УДАЧА УЖЕ РЕШИЛА…';
     els.winnerPanel.classList.remove('open');
